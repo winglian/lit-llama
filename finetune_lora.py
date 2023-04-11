@@ -21,6 +21,7 @@ from scripts.prepare_alpaca import generate_prompt
 
 
 out_dir = "out/alpaca-lora"
+tokenizer_model_dir = "checkpoints/lit-llama/tokenizer.model"
 eval_interval = 20
 save_interval = 20
 eval_iters = 100
@@ -44,11 +45,14 @@ def main(
         *,
         checkpoint_path: Path = Path("checkpoints/lit-llama/7B/state_dict.pth"),
         out_path: Path = Path("out/alpaca-lora"),
+        dataset_path: Path = Path("data/alpaca"),
+        tokenizer_model_path: Path = Path("checkpoints/lit-llama/tokenizer.model"),
         model_size: str = '7B',
         float32_matmul_precision: str = "medium",
 ) -> None:
-    global out_dir
+    global out_dir, tokenizer_model_dir
     out_dir = out_path
+    tokenizer_model_dir = tokenizer_model_path
 
     torch.set_float32_matmul_precision(float32_matmul_precision)
 
@@ -59,7 +63,7 @@ def main(
     if fabric.global_rank == 0:
         os.makedirs(out_dir, exist_ok=True)
 
-    train_data, val_data = load_datasets()
+    train_data, val_data = load_datasets(dataset_path)
 
     config = LLaMAConfig.from_name(model_size)
     config.block_size = block_size
@@ -133,7 +137,7 @@ def train(
 
 
 def generate_response(model, instruction):
-    tokenizer = Tokenizer("checkpoints/lit-llama/tokenizer.model")
+    tokenizer = Tokenizer(tokenizer_model_dir)
     sample = {"instruction": instruction, "input": ""}
     prompt = generate_prompt(sample)
     encoded = tokenizer.encode(prompt, bos=True, eos=True)
