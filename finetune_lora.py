@@ -6,6 +6,7 @@ the PyTorch nightly version for a fix (see https://github.com/Lightning-AI/lit-l
 """
 import os
 import time
+from pathlib import Path
 
 import lightning as L
 import numpy as np
@@ -39,7 +40,18 @@ lora_dropout = 0.05
 warmup_steps = 100
 
 
-def main():
+def main(
+        *,
+        checkpoint_path: Path = Path("checkpoints/lit-llama/7B/state_dict.pth"),
+        out_path: Path = Path("out/alpaca-lora"),
+        model_size: str = '7B',
+        float32_matmul_precision: str = "medium",
+) -> None:
+    global out_dir
+    out_dir = out_path
+
+    torch.set_float32_matmul_precision(float32_matmul_precision)
+
     fabric = L.Fabric(accelerator="auto", devices="auto", precision="16-mixed")
     fabric.launch()
     fabric.seed_everything(1337 + fabric.global_rank)
@@ -49,10 +61,10 @@ def main():
 
     train_data, val_data = load_datasets()
 
-    config = LLaMAConfig.from_name("7B")
+    config = LLaMAConfig.from_name(model_size)
     config.block_size = block_size
 
-    checkpoint = torch.load("checkpoints/lit-llama/7B/state_dict.pth")
+    checkpoint = torch.load(checkpoint_path)
 
     with fabric.device, lora(r=lora_r, alpha=lora_alpha, dropout=lora_dropout, enabled=True):
         torch.set_default_tensor_type(torch.HalfTensor)
@@ -194,5 +206,6 @@ def load_datasets(data_dir: str = "data/alpaca"):
 
 
 if __name__ == "__main__":
-    torch.set_float32_matmul_precision("medium")
-    main()
+    from jsonargparse import CLI
+
+    CLI(main)
