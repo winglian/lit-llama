@@ -22,6 +22,8 @@ from scripts.prepare_alpaca import generate_prompt
 
 out_dir = "out/alpaca-lora"
 tokenizer_model_dir = "checkpoints/lit-llama/tokenizer.model"
+datasets_dir = None
+checkpoint_dir = None
 eval_interval = 20
 save_interval = 20
 eval_iters = 100
@@ -39,6 +41,7 @@ lora_r = 8
 lora_alpha = 16
 lora_dropout = 0.05
 warmup_steps = 100
+model_sz = '13B'
 
 
 def main(
@@ -47,28 +50,34 @@ def main(
         out_path: Path = Path("out/alpaca-lora"),
         dataset_path: Path = Path("data/alpaca"),
         tokenizer_model_path: Path = Path("checkpoints/lit-llama/tokenizer.model"),
-        model_size: str = '7B',
+        model_size: str = '13B',
         float32_matmul_precision: str = "medium",
 ) -> None:
-    global out_dir, tokenizer_model_dir
+    global out_dir, tokenizer_model_dir, datasets_dir, checkpoint_dir, model_sz
     out_dir = out_path
     tokenizer_model_dir = tokenizer_model_path
+    datasets_dir = dataset_path
+    checkpoint_dir = checkpoint_path
+    model_sz = model_size
 
     torch.set_float32_matmul_precision(float32_matmul_precision)
 
-    fabric = L.Fabric(accelerator="auto", devices="auto", precision="16-mixed")
-    fabric.launch()
+    fabric = L.Fabric(accelerator="tpu", devices="auto", precision="bf16-mixed")
+    fabric.launch(run_training)  # https://github.com/Lightning-AI/lightning/issues/17194
+
+
+def run_training(fabric):
     fabric.seed_everything(1337 + fabric.global_rank)
 
     if fabric.global_rank == 0:
         os.makedirs(out_dir, exist_ok=True)
 
-    train_data, val_data = load_datasets(dataset_path)
+    train_data, val_data = load_datasets(datasets_dir)
 
-    config = LLaMAConfig.from_name(model_size)
+    config = LLaMAConfig.from_name(model_sz)
     config.block_size = block_size
 
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_dir)
 
     with fabric.device, lora(r=lora_r, alpha=lora_alpha, dropout=lora_dropout, enabled=True):
         torch.set_default_tensor_type(torch.HalfTensor)
@@ -142,7 +151,7 @@ def generate_response(model, instruction):
     prompt = generate_prompt(sample)
     encoded = tokenizer.encode(prompt, bos=True, eos=True)
     encoded = encoded[None, :]  # add batch dimension
-    encoded = encoded.to(model.device)
+    # encoded = encoded.to(model.device)
 
     output = generate(
         model,
@@ -199,7 +208,7 @@ def get_batch(fabric: L.Fabric, data: list):
 
     x = torch.stack([pad_left(x, pad_id=0) for x in input_ids])
     y = torch.stack([pad_left(x, pad_id=-1) for x in labels])
-    x, y = fabric.to_device((x.pin_memory(), y.pin_memory()))
+    x, y = fabric.to_device((x, y))
     return x, y
 
 
