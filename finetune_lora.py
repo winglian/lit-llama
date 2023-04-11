@@ -27,8 +27,8 @@ log_interval = 1
 
 # Hyperparameters
 learning_rate = 3e-4
-batch_size = 128
-micro_batch_size = 4
+batch_size = 1024
+micro_batch_size = 64
 gradient_accumulation_steps = batch_size // micro_batch_size
 max_iters = 50000 * 3 // micro_batch_size
 weight_decay = 0.0
@@ -194,5 +194,5 @@ def load_datasets(data_dir: str = "data/alpaca"):
 
 
 if __name__ == "__main__":
-    torch.set_float32_matmul_precision("high")
+    torch.set_float32_matmul_precision("medium")
     main()
