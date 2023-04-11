@@ -40,7 +40,7 @@ warmup_steps = 100
 
 
 def main():
-    fabric = L.Fabric(accelerator="cuda", devices=1, precision="bf16-mixed")
+    fabric = L.Fabric(accelerator="auto", devices="auto", precision="16-mixed")
     fabric.launch()
     fabric.seed_everything(1337 + fabric.global_rank)
 
@@ -59,8 +59,8 @@ def main():
         model = LLaMA(config).bfloat16()
         torch.set_default_tensor_type(torch.FloatTensor)
         # strict=False because missing keys due to LoRA weights not contained in checkpoint state
-        model.load_state_dict(checkpoint, strict=False) 
-    
+        model.load_state_dict(checkpoint, strict=False)
+
     mark_only_lora_as_trainable(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -102,7 +102,7 @@ def train(
             optimizer.step()
             optimizer.zero_grad()
             step_count += 1
-                
+
             if step_count % eval_interval == 0:
                 val_loss = validate(fabric, model, val_data)
                 fabric.print(f"step {iter_num}: val loss {val_loss:.4f}")
@@ -152,7 +152,7 @@ def validate(fabric: L.Fabric, model: torch.nn.Module, val_data: np.ndarray) -> 
 
     # produce an example:
     instruction = "Recommend a movie for me to watch during the weekend and explain the reason."
-    
+
     output = generate_response(model, instruction)
     fabric.print(instruction)
     fabric.print(output)
@@ -166,7 +166,7 @@ def loss_fn(logits, targets):
     targets = targets[..., 1:].contiguous()
     loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
     return loss
-    
+
 
 def get_batch(fabric: L.Fabric, data: list):
     ix = torch.randint(len(data), (micro_batch_size,))
