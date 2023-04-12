@@ -19,6 +19,7 @@ from lit_llama.adapter import LLaMA, LLaMAConfig, mark_only_adapter_as_trainable
 from lit_llama.tokenizer import Tokenizer
 from lit_llama.utils import EmptyInitOnDevice
 from scripts.prepare_alpaca import generate_prompt
+from tqdm import tqdm
 
 
 out_dir = "out/adapter/"
@@ -85,6 +86,7 @@ def train(
     """
     step_count = 0
 
+    pbar = tqdm(total=max_iters)
     for iter_num in range(max_iters):
 
         if step_count <= warmup_steps:
@@ -123,9 +125,10 @@ def train(
                     torch.save(checkpoint, os.path.join(out_dir, f"iter-{iter_num:06d}-ckpt.pt"))
                 fabric.barrier()
 
+        pbar.update(1)
         dt = time.time() - t0
         if iter_num % log_interval == 0:
-            fabric.print(f"iter {iter_num}: loss {loss.item():.4f}, time: {dt*1000:.2f}ms")
+            pbar.set_description(f"iter {iter_num}: loss {loss.item():.4f}, time: {dt*1000:.2f}ms")
 
 
 def generate_response(model, instruction):
